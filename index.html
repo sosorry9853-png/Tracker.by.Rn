@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pink Habit Tracker - All Dates Visible</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --pink-main: #dfaec1;
+            --pink-light: #fbebf1;
+            --pink-dark: #be7e96;
+            --purple: #9b59b6;
+            --grid-border: #e0e0e0;
+            --header-bg: #f9f9f9;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: #333;
+            font-family: 'Roboto', sans-serif;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* --- 1. FORCE LANDSCAPE MODE --- */
+        @media screen and (orientation: portrait) {
+            .app-wrapper {
+                transform: rotate(90deg);
+                width: 100vh !important;
+                height: 100vw !important;
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) rotate(90deg);
+            }
+        }
+
+        /* --- 2. MAIN LAYOUT --- */
+        .app-wrapper {
+            width: 100%;
+            height: 100%;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+        }
+
+        /* --- 3. TOP: DASHBOARD --- */
+        .dashboard {
+            height: 38%; /* Slightly taller for graph labels */
+            display: flex;
+            gap: 15px;
+            margin-bottom: 5px;
+            border-bottom: 3px solid var(--pink-main);
+            padding-bottom: 5px;
+            flex-shrink: 0; /* Don't shrink */
+        }
+
+        /* Left: Circle */
+        .chart-left {
+            width: 150px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-right: 1px solid #eee;
+            padding-right: 15px;
+        }
+
+        .percent-label {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        .percent-label h2 { margin: 0; font-size: 1.4rem; color: var(--purple); }
+        .percent-label span { font-size: 0.6rem; color: #888; }
+
+        /* Right: Big Graph */
+        .chart-right {
+            flex: 1;
+            min-width: 0; /* Prevents graph collapse */
+            display: flex;
+            flex-direction: column;
+        }
+
+        .month-nav {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            height: 25px;
+        }
+        .month-nav button {
+            background: none; border: none; color: var(--purple);
+            font-weight: bold; font-size: 1.2rem; cursor: pointer; padding: 0 15px;
+        }
+        .month-nav span {
+            font-family: 'Dancing Script', cursive; font-size: 1.2rem;
+            color: var(--pink-dark); min-width: 120px; text-align: center;
+        }
+
+        .graph-container {
+            flex: 1;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* --- 4. BOTTOM: SPREADSHEET --- */
+        .sheet-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--grid-border);
+            min-height: 0;
+        }
+
+        .header-row {
+            display: flex;
+            height: 30px;
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--grid-border);
+            flex-shrink: 0;
+        }
+
+        .sheet-body {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .habit-row {
+            display: flex;
+            height: 38px;
+            border-bottom: 1px solid #f0f0f0;
+            background: white;
+            flex-shrink: 0;
+        }
+        .habit-row:nth-child(even) { background-color: #fafafa; }
+
+        /* --- COLUMNS --- */
+        .col-name {
+            width: 18%;
+            border-right: 2px solid var(--grid-border);
+            display: flex; align-items: center; padding-left: 5px;
+            background: white; position: sticky; left: 0; z-index: 5;
+        }
+        .col-name input {
+            width: 100%; border: none; background: transparent;
+            font-size: 0.75rem; outline: none;
+        }
+
+        .col-days-wrapper { flex: 1; display: flex; }
+        
+        .col-day {
+            flex: 1; border-right: 1px solid #f4f4f4;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.6rem; cursor: pointer; position: relative;
+        }
+        .header-row .col-day { font-weight: bold; color: #666; background: #f9f9f9; }
+        .col-day.is-today { background-color: #fff0f5; border-bottom: 3px solid var(--purple); }
+
+        /* Animated Tick */
+        .tick-box {
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.1s;
+        }
+        .tick-box.checked { background-color: var(--pink-main); }
+        
+        .checkmark-svg {
+            width: 16px; height: 16px;
+            opacity: 0; transform: scale(0.5);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .tick-box.checked .checkmark-svg { opacity: 1; transform: scale(1); }
+        .checkmark-path { fill: none; stroke: white; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+
+        /* Progress Bar */
+        .col-progress {
+            width: 12%; border-left: 2px solid var(--grid-border);
+            display: flex; align-items: center; padding: 0 8px; background: white;
+        }
+        .bar-track {
+            flex: 1; height: 8px; background: #eee; border-radius: 4px;
+            overflow: hidden; margin-right: 5px;
+        }
+        .bar-fill {
+            height: 100%; background: var(--purple); width: 0%; transition: width 0.3s;
+        }
+        .bar-text {
+            font-size: 0.6rem; width: 25px; color: #555; text-align: right;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-wrapper">
+        <div class="dashboard">
+            <div class="chart-left">
+                <canvas id="donutChart"></canvas>
+                <div class="percent-label">
+                    <h2 id="total-percent">0%</h2>
+                    <span>Done</span>
+                </div>
+            </div>
+
+            <div class="chart-right">
+                <div class="month-nav">
+                    <button onclick="changeMonth(-1)">&#8249;</button>
+                    <span id="month-display">Loading...</span>
+                    <button onclick="changeMonth(1)">&#8250;</button>
+                </div>
+                <div class="graph-container">
+                    <canvas id="areaChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="sheet-container">
+            <div class="header-row">
+                <div class="col-name" style="justify-content:center; font-weight:bold; color:#555; font-size:0.7rem;">HABITS</div>
+                <div class="col-days-wrapper" id="header-days"></div>
+                <div class="col-progress" style="justify-content:center; font-weight:bold; color:#555; font-size:0.6rem;">STATUS</div>
+            </div>
+
+            <div class="sheet-body" id="sheet-body"></div>
+        </div>
+    </div>
+
+    <script>
+        const ROW_COUNT = 10;
+        let currentDate = new Date();
+        let activeMonthData = [];
+        let daysInCurrentMonth = 31;
+        let allTrackerData = JSON.parse(localStorage.getItem('yearlyHabitData')) || {};
+
+        window.addEventListener('load', () => {
+            updateMonthDisplay();
+            loadMonthData();
+            initCharts();
+            setTimeout(() => { 
+                window.dispatchEvent(new Event('resize')); 
+                updateCharts();
+            }, 100);
+        });
+
+        function updateMonthDisplay() {
+            const options = { month: 'long', year: 'numeric' };
+            document.getElementById('month-display').innerText = currentDate.toLocaleDateString('en-US', options);
+            daysInCurrentMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+        }
+
+        function getStorageKey() { return `${currentDate.getFullYear()}-${currentDate.getMonth()}`; }
+
+        function loadMonthData() {
+            const key = getStorageKey();
+            if (allTrackerData[key]) {
+                activeMonthData = allTrackerData[key];
+            } else {
+                const prevKey = Object.keys(allTrackerData).sort().pop();
+                let habitNames = Array.from({length: ROW_COUNT}, (_, i) => `Habit ${i+1}`);
+                if (prevKey && allTrackerData[prevKey]) habitNames = allTrackerData[prevKey].map(h => h.name);
+                
+                activeMonthData = habitNames.map(name => ({
+                    name: name,
+                    checks: Array(daysInCurrentMonth).fill(false)
+                }));
+                saveData();
+            }
+            // Array length fix
+            activeMonthData.forEach(h => {
+                if(h.checks.length !== daysInCurrentMonth) {
+                    const old = h.checks;
+                    h.checks = Array(daysInCurrentMonth).fill(false);
+                    for(let i=0; i<Math.min(old.length, daysInCurrentMonth); i++) h.checks[i] = old[i];
+                }
+            });
+            renderInterface();
+        }
+
+        function saveData() {
+            allTrackerData[getStorageKey()] = activeMonthData;
+            localStorage.setItem('yearlyHabitData', JSON.stringify(allTrackerData));
+        }
+
+        window.changeMonth = function(dir) {
+            currentDate.setMonth(currentDate.getMonth() + dir);
+            updateMonthDisplay();
+            loadMonthData();
+        };
+
+        function renderInterface() {
+            const headerContainer = document.getElementById('header-days');
+            headerContainer.innerHTML = '';
+            const today = new Date();
+            const isToday = today.getMonth() === currentDate.getMonth() && today.getFullYear() === currentDate.getFullYear();
+
+            for(let i=1; i<=daysInCurrentMonth; i++){
+                let d = document.createElement('div');
+                d.className = 'col-day';
+                d.innerText = i;
+                if(isToday && i === today.getDate()) d.classList.add('is-today');
+                headerContainer.appendChild(d);
+            }
+
+            const container = document.getElementById('sheet-body');
+            container.innerHTML = '';
+
+            activeMonthData.forEach((habit, hIndex) => {
+                const row = document.createElement('div');
+                row.className = 'habit-row';
+
+                let html = `<div class="col-name"><input type="text" value="${habit.name}" oninput="updateName(${hIndex}, this.value)"></div>`;
+                html += `<div class="col-days-wrapper">`;
+                
+                habit.checks.forEach((isChecked, dIndex) => {
+                    html += `<div class="col-day" onclick="toggleCheck(${hIndex}, ${dIndex})">
+                        <div class="tick-box ${isChecked ? 'checked' : ''}">
+                            <svg class="checkmark-svg" viewBox="0 0 24 24"><polyline class="checkmark-path" points="20 6 9 17 4 12"></polyline></svg>
+                        </div>
+                    </div>`;
+                });
+
+                const pct = Math.round((habit.checks.filter(Boolean).length / daysInCurrentMonth) * 100);
+                html += `</div>
+                    <div class="col-progress">
+                        <div class="bar-track"><div class="bar-fill" style="width: ${pct}%"></div></div>
+                        <div class="bar-text">${pct}%</div>
+                    </div>`;
+                row.innerHTML = html;
+                container.appendChild(row);
+            });
+            
+            updateCharts();
+        }
+
+        window.toggleCheck = function(h, d) {
+            activeMonthData[h].checks[d] = !activeMonthData[h].checks[d];
+            saveData();
+            renderInterface();
+        };
+
+        window.updateName = function(idx, val) {
+            activeMonthData[idx].name = val;
+            saveData();
+        };
+
+        let donutChart, areaChart;
+
+        function initCharts() {
+            // Donut
+            const ctxD = document.getElementById('donutChart').getContext('2d');
+            donutChart = new Chart(ctxD, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Done', 'Left'],
+                    datasets: [{ data: [0, 100], backgroundColor: ['#9b59b6', '#f3f3f3'], borderWidth: 0, cutout: '70%' }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                }
+            });
+
+            // Big Graph
+            const ctxA = document.getElementById('areaChart').getContext('2d');
+            const grad = ctxA.createLinearGradient(0,0,0,300);
+            grad.addColorStop(0, 'rgba(223, 174, 193, 0.9)');
+            grad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+
+            areaChart = new Chart(ctxA, {
+                type: 'line',
+                data: { labels: [], datasets: [{ data: [], borderColor: '#dfaec1', backgroundColor: grad, fill: true, tension: 0.3, pointRadius: 2, pointHitRadius: 15 }] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { 
+                            display: true, // Visible X-Axis
+                            grid: { display: false },
+                            ticks: { 
+                                font: { size: 8 }, // Smaller font to fit all
+                                maxTicksLimit: 32, // Allow up to 32 ticks
+                                autoSkip: false,   // Force all numbers to show
+                                color: '#666'
+                            } 
+                        },
+                        y: { display: false, beginAtZero: true }
+                    },
+                    layout: { padding: { left: 0, right: 0, top: 10, bottom: 0 } }
+                }
+            });
+        }
+
+        function updateCharts() {
+            if(!donutChart || !areaChart) return;
+            let totalChecks = 0;
+            let dailyCounts = Array(daysInCurrentMonth).fill(0);
+            activeMonthData.forEach(h => {
+                h.checks.forEach((c, i) => {
+                    if(c) { totalChecks++; dailyCounts[i]++; }
+                });
+            });
+            const maxChecks = activeMonthData.length * daysInCurrentMonth;
+            const totalPct = maxChecks === 0 ? 0 : Math.round((totalChecks / maxChecks) * 100);
+
+            document.getElementById('total-percent').innerText = totalPct + "%";
+            donutChart.data.datasets[0].data = [totalPct, 100 - totalPct];
+            donutChart.update();
+
+            areaChart.data.labels = Array.from({length: daysInCurrentMonth}, (_, i) => i + 1);
+            areaChart.data.datasets[0].data = dailyCounts;
+            areaChart.update();
+        }
+    </script>
+</body>
+</html>
